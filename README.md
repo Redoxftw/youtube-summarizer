@@ -10,7 +10,7 @@ A simple tool that takes a YouTube video URL, extracts the transcript, and summa
 
 ```bash
 git clone https://github.com/Redoxftw/youtube-summarizer.git
-cd youtube-summarizer
+cd youtube-summarizer```
 
 ### 2. Create a Virtual Environment
 
