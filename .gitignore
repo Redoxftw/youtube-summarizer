@@ -1,0 +1,13 @@
+# Python Virtual Environment
+.venv/
+
+# Environment variables (contains API key)
+.env
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# Output files
+summary_*.txt
+summary_*.json
