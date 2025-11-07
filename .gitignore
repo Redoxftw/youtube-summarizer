@@ -11,3 +11,6 @@ __pycache__/
 # Output files
 summary_*.txt
 summary_*.json
+
+# Streamlit secrets
+.streamlit/secrets.toml
