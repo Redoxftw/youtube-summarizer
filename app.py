@@ -145,62 +145,97 @@ MODEL_CHOICE = st.selectbox(
     "Choose your model:",
     ("models/gemini-2.5-flash", "models/gemini-pro-latest", "models/gemini-2.5-pro")
 )
-# --- ADD THIS ---
+
+# Get the summary format from the user
 summary_format = st.radio(
     "Select your desired summary format:",
     ("Standard Summary", "Bullet-Point Takeaways", "Tweet Thread (3 Tweets)", "Blog Post"),
     key="format_choice",
-    horizontal=True # This makes it look cleaner
+    horizontal=True
 )
-# --- END ADD ---
+
 # Get the YouTube URL from the user
 YOUTUBE_URL = st.text_input("Please paste the YouTube URL and press Enter:")
 
-# Create a button that starts the process
+# --- 1. GENERATE DATA BLOCK ---
+# This block only runs when the button is clicked.
+# Its only job is to create data and save it to st.session_state.
+
 if st.button("Generate Summary"):
     if not YOUTUBE_URL:
         st.warning("Please enter a YouTube URL.")
     else:
-        # Show a "loading" spinner while it works
+        # Clear any old results before we start a new job
+        st.session_state.pop("final_summary", None)
+        st.session_state.pop("full_transcript", None)
+        st.session_state.pop("video_id", None)
+        
         with st.spinner("Generating summary... This may take a moment."):
             try:
-                # 1. Configure API
-                model = configure_api(MODEL_CHOICE)
-                if model:
+                # 1. Fetch Transcript
+                transcript, video_id = fetch_transcript(YOUTUBE_URL)
+                
+                if transcript:
+                    st.session_state["full_transcript"] = transcript # Save transcript
                     
-                    # 2. Fetch Transcript
-                    transcript, video_id = fetch_transcript(YOUTUBE_URL)
+                    # 2. Chunk Text
+                    text_chunks = chunk_text(transcript)
                     
-                    if transcript:
-                        # 3. Chunk Text
-                        text_chunks = chunk_text(transcript)
+                    # 3. Summarize Chunks
+                    chunk_summaries = []
+                    for i, chunk in enumerate(text_chunks):
+                        summary = summarize_chunk(chunk, MODEL_CHOICE)
+                        if summary:
+                            chunk_summaries.append(summary)
+                    
+                    # 4. Combine Summaries
+                    if chunk_summaries:
+                        final_summary = create_final_summary(chunk_summaries, MODEL_CHOICE, summary_format, video_title=video_id)
                         
-                        # 4. Summarize Chunks
-                        chunk_summaries = []
-                        for i, chunk in enumerate(text_chunks):
-                            summary = summarize_chunk(chunk, MODEL_CHOICE)
-                            if summary:
-                                chunk_summaries.append(summary)
-                        
-                        # 5. Combine Summaries
-                        if chunk_summaries:
-                            final_summary = create_final_summary(chunk_summaries, MODEL_CHOICE, summary_format, video_title=video_id)
-                            
-                            # 6. Display Final Summary
-                            if final_summary:
-                                st.success("Summary Generated!")
-                                st.markdown(final_summary) # Display as formatted text
-                                
-                                # --- ADD THIS ---
-                                st.download_button(
-                                    label="Download Summary as .txt",
-                                    data=final_summary,
-                                    file_name=f"summary_{video_id}.txt",
-                                    mime="text/plain"
-                                )
-                            else:
-                                st.error("Could not generate the final summary.")
+                        if final_summary:
+                            # 5. Save results to session state
+                            st.session_state["final_summary"] = final_summary
+                            st.session_state["video_id"] = video_id
                         else:
-                            st.error("No chunk summaries were generated.")
+                            st.error("Could not generate the final summary.")
+                    else:
+                        st.error("No chunk summaries were generated.")
             except Exception as e:
                 st.error(f"An unexpected error occurred: {e}")
+
+# --- 2. DISPLAY DATA BLOCK ---
+# This block runs every time the app re-runs (e.g., when you type).
+# It just reads data from st.session_state and displays it.
+
+if "final_summary" in st.session_state:
+    st.success("Summary Generated!")
+    st.markdown(st.session_state["final_summary"])
+    
+    st.download_button(
+        label="Download Summary as .txt",
+        data=st.session_state["final_summary"],
+        file_name=f"summary_{st.session_state['video_id']}.txt",
+        mime="text/plain"
+    )
+    
+    # Show the Q&A box
+    if "full_transcript" in st.session_state:
+        st.markdown("---")
+        st.subheader("💬 Chat with the Video")
+        User_question = st.text_input("Ask a follow-up question about this video:")
+        
+        if User_question:
+            with st.spinner("Finding the answer..."):
+                prompt = f"""
+                Here is the full transcript of a video:
+                ---
+                {st.session_state["full_transcript"]}
+                ---
+                Using ONLY this transcript, please answer the following question:
+                {User_question}
+                If the answer is not in the transcript, say "I'm sorry, that information is not in the video transcript."
+                """
+                
+                model = configure_api(MODEL_CHOICE) # We can use MODEL_CHOICE from the top
+                response = model.generate_content(prompt)
+                st.markdown(response.text)
