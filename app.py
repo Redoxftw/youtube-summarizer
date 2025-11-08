@@ -75,11 +75,13 @@ def chunk_text(text, chunk_size=8000, overlap=400):
         if start + overlap >= len(text): break
     if start < len(text): chunks.append(text[start:])
     return chunks
-
-def summarize_chunk(chunk, model, attempt=1, max_attempts=3):
+@st.cache_data
+def summarize_chunk(chunk, model_name, attempt=1, max_attempts=3):
     """Summarizes a single text chunk using the specified Gemini model."""
     prompt = f"Please provide a concise summary... {chunk} ---" # (Shortened prompt for clarity)
     try:
+        # Create the model inside the cached function
+        model = configure_api(model_name)
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
@@ -90,36 +92,39 @@ def summarize_chunk(chunk, model, attempt=1, max_attempts=3):
             st.error(f"Error summarizing chunk: {e}")
             return None
 @st.cache_data
-def create_final_summary(summaries, _model, video_title="this video"):
+def create_final_summary(summaries, model_name, summary_format, video_title="this video"):
     """Combines all chunk summaries into a final, formatted report."""
+    
     combined_summaries = "\n\n".join(summaries)
+    
     prompt = f"""
-    You are an expert video summarizer...
-    The output MUST be in the following Markdown format:
+    You are an expert video summarizer.
+    You will be given a series of summaries from sequential chunks of a video transcript titled '{video_title}'.
+    Please synthesize these chunked summaries into one cohesive, well-formatted final output.
 
-    **Overview:**
-    [A short, engaging overview of the entire video, 3-4 lines.]
-
-    **Key Takeaways:**
-    * [Key takeaway 1]
-    ...
-    * [Key takeaway 5]
-
-    **Suggested Chapters:**
-    * [Chapter Title 1]
-    ...
-    * [Chapter Title 3]
+    The user has requested the output in this specific format: **{summary_format}**
 
     ---
     Here are the chunked summaries:
     {combined_summaries}
     ---
+
     Please generate the final, synthesized summary now.
+
+    **IMPORTANT FORMATTING RULES:**
+    - If the user requested "Standard Summary", you MUST provide:
+      **Overview:** [A short, engaging overview...]
+      **Key Takeaways:** [5-7 bullet points...]
+      **Suggested Chapters:** [3-5 chapter titles...]
+    - If the user requested "Bullet-Point Takeaways", provide *only* a list of 10-15 detailed bullet points.
+    - If the user requested "Tweet Thread (3 Tweets)", provide exactly 3 numbered tweets (1/3, 2/3, 3/3) that are concise and engaging.
+    - If the user requested "Blog Post", provide a short, 3-paragraph blog post based on the content.
     """
+    
     try:
-        # Re-create the model object for the API call
-        model = configure_api("models/gemini-2.5-flash") # Or your default model
-        response = _model.generate_content(prompt)
+        # This is the new, clean way:
+        model = configure_api(model_name)
+        response = model.generate_content(prompt)
         return response.text
     except Exception as e:
         st.error(f"Error creating final summary: {e}")
@@ -140,7 +145,14 @@ MODEL_CHOICE = st.selectbox(
     "Choose your model:",
     ("models/gemini-2.5-flash", "models/gemini-pro-latest", "models/gemini-2.5-pro")
 )
-
+# --- ADD THIS ---
+summary_format = st.radio(
+    "Select your desired summary format:",
+    ("Standard Summary", "Bullet-Point Takeaways", "Tweet Thread (3 Tweets)", "Blog Post"),
+    key="format_choice",
+    horizontal=True # This makes it look cleaner
+)
+# --- END ADD ---
 # Get the YouTube URL from the user
 YOUTUBE_URL = st.text_input("Please paste the YouTube URL and press Enter:")
 
@@ -166,13 +178,13 @@ if st.button("Generate Summary"):
                         # 4. Summarize Chunks
                         chunk_summaries = []
                         for i, chunk in enumerate(text_chunks):
-                            summary = summarize_chunk(chunk, model)
+                            summary = summarize_chunk(chunk, MODEL_CHOICE)
                             if summary:
                                 chunk_summaries.append(summary)
                         
                         # 5. Combine Summaries
                         if chunk_summaries:
-                            final_summary = create_final_summary(chunk_summaries, model, video_title=video_id)
+                            final_summary = create_final_summary(chunk_summaries, MODEL_CHOICE, summary_format, video_title=video_id)
                             
                             # 6. Display Final Summary
                             if final_summary:
