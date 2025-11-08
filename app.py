@@ -41,7 +41,7 @@ def get_video_id(url_or_id):
         return url_or_id
     else:
         raise ValueError(f"Could not extract video ID from: {url_or_id}")
-
+@st.cache_data
 def fetch_transcript(youtube_url_or_id):
     """
     Fetches the full transcript for a YouTube video as a single string.
@@ -89,8 +89,8 @@ def summarize_chunk(chunk, model, attempt=1, max_attempts=3):
         else:
             st.error(f"Error summarizing chunk: {e}")
             return None
-
-def create_final_summary(summaries, model, video_title="this video"):
+@st.cache_data
+def create_final_summary(summaries, _model, video_title="this video"):
     """Combines all chunk summaries into a final, formatted report."""
     combined_summaries = "\n\n".join(summaries)
     prompt = f"""
@@ -117,7 +117,9 @@ def create_final_summary(summaries, model, video_title="this video"):
     Please generate the final, synthesized summary now.
     """
     try:
-        response = model.generate_content(prompt)
+        # Re-create the model object for the API call
+        model = configure_api("models/gemini-2.5-flash") # Or your default model
+        response = _model.generate_content(prompt)
         return response.text
     except Exception as e:
         st.error(f"Error creating final summary: {e}")
@@ -176,6 +178,14 @@ if st.button("Generate Summary"):
                             if final_summary:
                                 st.success("Summary Generated!")
                                 st.markdown(final_summary) # Display as formatted text
+                                
+                                # --- ADD THIS ---
+                                st.download_button(
+                                    label="Download Summary as .txt",
+                                    data=final_summary,
+                                    file_name=f"summary_{video_id}.txt",
+                                    mime="text/plain"
+                                )
                             else:
                                 st.error("Could not generate the final summary.")
                         else:
