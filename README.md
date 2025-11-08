@@ -16,6 +16,14 @@ This project was built to solve the common problem of getting key information fr
   * 3 Suggested Chapters  
 * **File Export:** Saves the final summary to both `.txt` and `.json` files for easy access.
 
+## ⚠️ Deployment Limitation
+
+This app runs perfectly on your local computer.
+
+However, when deployed to a free cloud service (like Streamlit Community Cloud), **YouTube may block its requests.** This is a common security measure used by large platforms to prevent scraping from data center IP addresses.
+
+**For the best and most reliable experience, please run this app on your local machine.**
+
 
 ## 🛠️ Setup Instructions
 
